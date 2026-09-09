@@ -213,7 +213,7 @@ tr.collapsed-row{display:none}tr.collapsed-row.visible{display:table-row}
 <!-- ── Location switcher (always visible) ── -->
 <div class="loc-bar" id="locBar" style="display:none">
   <span class="loc-label">Локация</span>
-  <select class="loc-select" id="locSelect" onchange="switchLocation(this.value)">
+  <select class="loc-select" id="locSelect" onchange="switchLocation(this.value, true)">
     <option value="uktus">Уктус — Баден-Баден Термы</option>
     <option value="sys">Сысерть — Баден-Баден Термы</option>
     <option value="etkul">Еткуль</option>
@@ -340,8 +340,11 @@ function mergeAllLocations(){
   });
   return merged;
 }
-function switchLocation(loc){
+function switchLocation(loc, persist){
   ACTIVE_LOC=loc;
+  // запоминаем только явный выбор пользователя: автооткат на Уктус
+  // не должен затирать локацию, выбранную на главной портала
+  if(persist) rememberLoc(loc);
   document.getElementById('locSelect').value=loc;
   var dot=document.getElementById('locDot');
   var statusTxt=document.getElementById('locStatusText');
@@ -380,6 +383,16 @@ function switchLocation(loc){
   RK.forEach(function(k){FILES[k]=data[k]||[];});
   buildDashboard();
 }
+// Локация, выбранная на главной портала: ?loc= в адресе, иначе localStorage.
+// Если по ней данных нет — молча откатываемся на Уктус.
+function initialLoc(){
+  var q=null;
+  try{ q=(new URLSearchParams(location.search)).get('loc'); }catch(e){}
+  if(!q){ try{ q=localStorage.getItem('bbt_loc'); }catch(e){} }
+  if(q && (q==='total'||locHasData(q))) return q;
+  return 'uktus';
+}
+function rememberLoc(loc){ try{ localStorage.setItem('bbt_loc', loc); }catch(e){} }
 function initLocBar(){
   document.getElementById('locBar').style.display='flex';
   // Mark unavailable locations in the dropdown with a text note
@@ -690,7 +703,7 @@ function toggleDrill(id){document.querySelectorAll('[data-drill="'+id+'"]').forE
 </script>
 
 <!-- BADEN_CHAT_WIDGET -->
-<script src="chat-widget.js?v=202609091314" data-report="finance"></script>
+<script src="chat-widget.js?v=202609091330" data-report="finance"></script>
 <!-- BADEN_AUDIT -->
 <script src="js/audit.js"></script>
 </body>
@@ -792,7 +805,7 @@ function toggleDrill(id){document.querySelectorAll('[data-drill="'+id+'"]').forE
 <script>_FD_ALL.uvildy={};</script>
 <script>_FD_ALL.kurgan={};</script>
 <script>
-/* auto-start 09.09.2026 13:03 */
+/* auto-start 09.09.2026 13:29 */
 var _t=setInterval(function(){
   if(typeof buildDashboard==='function'&&typeof LOC_DATA!=='undefined'){
     clearInterval(_t);
@@ -807,20 +820,19 @@ var _t=setInterval(function(){
     LOC_DATA['tavatuy']=window._FD_ALL['tavatuy']||{};
     LOC_DATA['uvildy']=window._FD_ALL['uvildy']||{};
     LOC_DATA['kurgan']=window._FD_ALL['kurgan']||{};
-    RK.forEach(function(k){FILES[k]=(LOC_DATA['uktus']&&LOC_DATA['uktus'][k])||[];});
     var el=document.getElementById('locUpdatedDate');
     if(el)el.textContent='09.09.2026';
     var lb=document.getElementById('locUpdatedLabel');
     if(lb&&el&&el.textContent)lb.style.display='';
     initLocBar();
-    try{buildDashboard();}catch(e){console.error(e);}
+    try{switchLocation(initialLoc());}catch(e){console.error(e);}
   }
 },40);
 setTimeout(function(){clearInterval(_t);},8000);
 </script>
 
 <!-- BADEN_CHAT_WIDGET -->
-<script src="chat-widget.js?v=202609091314" data-report="finance"></script>
+<script src="chat-widget.js?v=202609091330" data-report="finance"></script>
 <!-- BADEN_AUDIT -->
 <script src="js/audit.js"></script>
 </body>
