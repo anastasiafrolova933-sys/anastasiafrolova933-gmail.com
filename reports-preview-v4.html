@@ -2132,6 +2132,65 @@ import * as THREE from 'three';
         '<span class="ts-right">' + quick + (can('finance') ? '<a href="owner.html">Экран собственника →</a>' : '') + '</span>';
       firstLabel.before(strip);
 
+      /* ── выбор локации: один на весь портал, живёт в localStorage['bbt_loc'].
+         Отчёты, умеющие в локации, получают ?loc=; остальные помечаются
+         «нет данных по локации», чтобы выбор не обещал того, чего нет. ── */
+      (function () {
+        var locs = L.locations || [];
+        if (locs.length < 2) return;
+        var map = L.locReports || {}, KEY = 'bbt_loc';
+        var cur = null;
+        try { cur = localStorage.getItem(KEY); } catch (e) {}
+        if (!locs.some(function (x) { return x.key === cur; })) cur = locs[0].key;
+
+        /* owner.html в L.reports нет, но данные там тоже уктусовские — помечаем наравне */
+        function isReport(href) { return href === 'owner.html' || !!(L.reports && L.reports[href.replace('.html', '')]); }
+        function supports(href) {
+          if (cur === 'total') return true;
+          return (map[href] || ['uktus']).indexOf(cur) !== -1;
+        }
+        function apply() {
+          try { localStorage.setItem(KEY, cur); } catch (e) {}
+          var missing = [];
+          document.querySelectorAll('#main a.card').forEach(function (a) {
+            var href = (a.getAttribute('href') || '').split('?')[0];
+            if (!href || href.indexOf('http') === 0) return;
+            var aware = !!map[href];
+            a.setAttribute('href', aware ? href + '?loc=' + cur : href);
+            if (!isReport(href)) return;               /* презентации и калькуляторы не трогаем */
+            var ok = supports(href);
+            a.classList.toggle('card-nodata', !ok);
+            var badge = a.querySelector('.nodata-badge');
+            if (!ok) {
+              if (!badge) {
+                var num = a.querySelector('.card-num');
+                var html = '<div class="nodata-badge">нет данных по локации</div>';
+                if (num) num.insertAdjacentHTML('afterend', html);
+                else a.insertAdjacentHTML('afterbegin', html);
+              }
+              var ttl = a.querySelector('.card-title');
+              if (ttl) missing.push(ttl.textContent);
+            } else if (badge) { badge.remove(); }
+          });
+          var note = document.getElementById('lb-note');
+          if (note) note.textContent = missing.length
+            ? 'нет данных: ' + missing.join(', ')
+            : 'данные есть по всем отчётам';
+        }
+
+        var bar = document.createElement('div');
+        bar.id = 'loc-bar';
+        bar.innerHTML = '<span class="lb-label">Локация</span>' +
+          '<select id="lb-select" aria-label="Выбор локации">' +
+          locs.map(function (x) {
+            return '<option value="' + x.key + '"' + (x.key === cur ? ' selected' : '') + '>' + x.name + '</option>';
+          }).join('') + '</select>' +
+          '<span class="lb-note" id="lb-note"></span>';
+        firstLabel.before(bar);
+        bar.querySelector('#lb-select').addEventListener('change', function () { cur = this.value; apply(); });
+        apply();
+      })();
+
       /* погода на Уктусе — трафик термы напрямую зависит от неё */
       fetch('https://api.open-meteo.com/v1/forecast?latitude=56.76&longitude=60.61&current=temperature_2m,weather_code&timezone=Asia%2FYekaterinburg')
         .then(function(r){ return r.json(); }).then(function(w){
@@ -2256,6 +2315,19 @@ body { padding-bottom: 132px; }
 .lab-sheet__row.sub { padding: 8px var(--s-4) 8px 28px; font-size: 13px; }
 .lab-sheet__row.sub span:first-child { color: var(--text-3, var(--text-2)); opacity: .8; }
 .lab-sheet__row.sub span:last-child { color: var(--text-2); }
+
+/* ── выбор локации на главной + пометка отчётов без данных ── */
+#loc-bar { display: flex; align-items: center; gap: 12px; margin: 0 0 26px; padding: 11px 18px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm); flex-wrap: wrap; }
+#loc-bar .lb-label { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--text-3); }
+#loc-bar select { font-size: 14px; font-weight: 600; padding: 6px 12px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; outline: none; }
+#loc-bar select:focus { border-color: var(--accent); }
+#loc-bar .lb-note { font-size: 11.5px; color: var(--text-3); margin-left: auto; }
+.card-nodata { opacity: .5; }
+.card-nodata .kpi-live { display: none; }
+.nodata-badge { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .3px;
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-3); margin: 2px 0 6px; }
 
 .lab-sheet__actions { margin-top: var(--s-6); display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
 .lab-sheet__open {
@@ -2563,6 +2635,20 @@ body { padding-bottom: 132px; }
     var L = LIVE, r = [];
     if (!L) return r;
     var t = L.thermal || {}, f = L.finance || {}, fc = L.forecast || {}, a = L.attendance || {};
+    /* выбранная на главной локация — показываем её и честно предупреждаем,
+       если по ней у этого отчёта данных нет */
+    var locList = L.locations || [];
+    if (locList.length > 1 && L.reports && L.reports[href.replace('.html', '')]) {
+      var curLoc = null;
+      try { curLoc = localStorage.getItem('bbt_loc'); } catch (e) {}
+      var locObj = locList.filter(function (x) { return x.key === curLoc; })[0];
+      if (locObj) {
+        r.push(['Локация', locObj.name]);
+        var lmap = L.locReports || {};
+        var okLoc = (curLoc === 'total') || ((lmap[href] || ['uktus']).indexOf(curLoc) !== -1);
+        if (!okLoc) r.push(['Данных по этой локации нет', 'показан Уктус', true]);
+      }
+    }
     if (href === 'finance.html') {
       // Итого по всем локациям, затем разбивка по каждой (если их больше одной)
       var byLoc = (f.byLoc || []).filter(function (x) { return x && x.totalRub; });
