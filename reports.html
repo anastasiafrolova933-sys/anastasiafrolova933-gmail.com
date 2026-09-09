@@ -2725,6 +2725,8 @@ body { padding-bottom: 132px; }
   function rowsFor(href) {
     var L = LIVE, r = [];
     if (!L) return r;
+    /* с главной приходит href с ?loc=... — для веток ниже нужен чистый путь */
+    href = (href || '').split('?')[0];
     var t = L.thermal || {}, f = L.finance || {}, fc = L.forecast || {}, a = L.attendance || {};
     /* выбранная на главной локация — показываем её и честно предупреждаем,
        если по ней у этого отчёта данных нет */
