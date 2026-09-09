@@ -2267,6 +2267,74 @@ import * as THREE from 'three';
           if (note) note.textContent = missing.length
             ? 'нет данных: ' + missing.join(', ')
             : 'данные есть по всем отчётам';
+          updateKpi();
+          markStrip();
+        }
+
+        /* ── цифры на карточках должны следовать за выбором локации ── */
+        function nfmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+        /* до миллиона показываем рубли: «87 610 ₽» читается лучше, чем «0,09 млн ₽» */
+        function mlnFmt(rub) {
+          if (Math.abs(rub) >= 1e6) return (rub / 1e6).toFixed(2).replace('.', ',') + ' млн ₽';
+          return nfmt(Math.round(rub)) + ' ₽';
+        }
+        function guestWord(n) {
+          var a = Math.abs(n) % 100, b = a % 10;
+          if (a > 10 && a < 20) return 'гостей';
+          if (b === 1) return 'гость';
+          if (b > 1 && b < 5) return 'гостя';
+          return 'гостей';
+        }
+        function setKpi(href, val, lbl) {
+          var a = document.querySelector('.cards a.card[href^="' + href + '"]');
+          if (!a) return;
+          var box = a.querySelector('.kpi-live');
+          if (!box) return;                      /* живой цифры не было — не выдумываем */
+          var v = box.querySelector('.kpi-val'), l = box.querySelector('.kpi-lbl');
+          if (v) v.textContent = val;
+          if (l) l.textContent = lbl;
+          /* спарклайн построен по Уктусу — на других локациях он врёт */
+          var svg = box.querySelector('svg');
+          if (svg) svg.style.display = (cur === 'uktus' ? '' : 'none');
+        }
+        function updateKpi() {
+          var fin = L.finance || {}, byLoc = fin.byLoc || [];
+          var fTotal = null;
+          if (cur === 'total') fTotal = fin.totalRub;
+          else {
+            var fe = byLoc.filter(function (x) { return x.key === cur; })[0];
+            if (fe) fTotal = fe.totalRub;
+          }
+          if (fTotal != null) setKpi('finance.html', mlnFmt(fTotal), 'поступления за ' + (fin.yesterday || 'вчера'));
+
+          var sl = L.salesByLoc || [], sFact = null, sGuests = 0, sCheck = null;
+          if (cur === 'total') {
+            if (sl.length) {
+              sFact = 0;
+              sl.forEach(function (x) { sFact += x.factRub || 0; sGuests += x.guests || 0; });
+              sCheck = sGuests ? Math.round(sFact / sGuests) : null;
+            }
+          } else {
+            var se = sl.filter(function (x) { return x.key === cur; })[0];
+            if (se) { sFact = se.factRub; sGuests = se.guests; sCheck = se.checkRub; }
+          }
+          if (sFact != null) setKpi('sales.html', mlnFmt(sFact),
+            'выручка вчера' + (sGuests ? ' · ' + nfmt(sGuests) + ' ' + guestWord(sGuests) : '') +
+            (sCheck ? ' · ср. чек ' + nfmt(sCheck) + ' ₽' : ''));
+        }
+        /* лента «Сегодня» построена на уктусовской термали — честно помечаем */
+        function markStrip() {
+          var strip = document.getElementById('today-strip');
+          if (!strip) return;
+          var mark = document.getElementById('ts-loc');
+          if (cur !== 'uktus') {
+            if (!mark) {
+              mark = document.createElement('span');
+              mark.id = 'ts-loc'; mark.className = 'ts-flags';
+              strip.appendChild(mark);
+            }
+            mark.textContent = 'цифры в этой строке — Уктус';
+          } else if (mark) { mark.remove(); }
         }
 
         var bar = document.createElement('div');
