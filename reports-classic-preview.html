@@ -2781,32 +2781,61 @@ body { padding-bottom: 132px; }
     /* выбранная на главной локация — показываем её и честно предупреждаем,
        если по ней у этого отчёта данных нет */
     var locList = L.locations || [];
-    if (locList.length > 1 && L.reports && L.reports[href.replace('.html', '')]) {
-      var curLoc = null;
-      try { curLoc = localStorage.getItem('bbt_loc'); } catch (e) {}
-      var locObj = locList.filter(function (x) { return x.key === curLoc; })[0];
-      if (locObj) {
-        r.push(['Локация', locObj.name]);
-        var lmap = L.locReports || {};
-        var okLoc = (curLoc === 'total') || ((lmap[href] || ['uktus']).indexOf(curLoc) !== -1);
-        if (!okLoc) r.push(['Данных по этой локации нет', 'показан Уктус', true]);
-      }
+    var curLoc = null;
+    if (locList.length > 1) { try { curLoc = localStorage.getItem('bbt_loc'); } catch (e) {} }
+    var locObj = locList.filter(function (x) { return x.key === curLoc; })[0];
+    if (locObj && L.reports && L.reports[href.replace('.html', '')]) {
+      r.push(['Локация', locObj.name]);
+      var lmap = L.locReports || {};
+      var okLoc = (curLoc === 'total') || ((lmap[href] || ['uktus']).indexOf(curLoc) !== -1);
+      if (!okLoc) r.push(['Данных по этой локации нет', 'показан Уктус', true]);
     }
     if (href === 'finance.html') {
-      // Итого по всем локациям, затем разбивка по каждой (если их больше одной)
       var byLoc = (f.byLoc || []).filter(function (x) { return x && x.totalRub; });
-      if (f.totalRub) r.push(['Итого за ' + (f.yesterday || 'вчера'), fmt(f.totalRub) + ' ₽']);
-      if (byLoc.length > 1) byLoc.forEach(function (x) {
-        r.push([x.name, fmt(x.totalRub) + ' ₽', false, 'sub']);
-      });
-      if (f.kassaRub) r.push(['Из них касса', fmt(f.kassaRub) + ' ₽']);
-      if (f.rsRub)    r.push(['Расчётный счёт', fmt(f.rsRub) + ' ₽']);
+      var fSel = byLoc.filter(function (x) { return x.key === curLoc; })[0];
+      if (fSel) {
+        /* выбрана конкретная локация — ведём её цифрами, как и карточка */
+        r.push(['Поступило за ' + (f.yesterday || 'вчера'), fmt(fSel.totalRub) + ' ₽']);
+        if (fSel.kassaRub) r.push(['Из них касса', fmt(fSel.kassaRub) + ' ₽']);
+        if (fSel.rsRub)    r.push(['Расчётный счёт', fmt(fSel.rsRub) + ' ₽']);
+        if (byLoc.length > 1) r.push(['Итого по всем локациям', fmt(f.totalRub) + ' ₽', false, 'sub']);
+      } else {
+        /* ИТОГО: сумма, затем разбивка по локациям */
+        if (f.totalRub) r.push(['Итого за ' + (f.yesterday || 'вчера'), fmt(f.totalRub) + ' ₽']);
+        if (byLoc.length > 1) byLoc.forEach(function (x) {
+          r.push([x.name, fmt(x.totalRub) + ' ₽', false, 'sub']);
+        });
+        if (f.kassaRub) r.push(['Из них касса', fmt(f.kassaRub) + ' ₽']);
+        if (f.rsRub)    r.push(['Расчётный счёт', fmt(f.rsRub) + ' ₽']);
+      }
     } else if (href === 'sales.html') {
-      if (t.revenueMln) r.push(['Выручка за ' + (t.yesterday || 'вчера'), fmt(t.revenueMln, 3) + ' млн ₽']);
-      if (t.guests)     r.push(['Гостей', fmt(t.guests)]);
-      if (t.checkRub)   r.push(['Средний чек', fmt(t.checkRub) + ' ₽']);
-      if (t.revenueDeltaWeek != null) r.push(['К прошлой неделе', pct(t.revenueDeltaWeek), t.revenueDeltaWeek < 0]);
-      if (t.revenueDelta2025 != null) r.push(['К 2025 году', pct(t.revenueDelta2025), t.revenueDelta2025 < 0]);
+      var sBy = L.salesByLoc || [];
+      var sSel = sBy.filter(function (x) { return x.key === curLoc; })[0];
+      if (!sSel && curLoc === 'total' && sBy.length) {
+        var sf = 0, sg = 0;
+        sBy.forEach(function (x) { sf += x.factRub || 0; sg += x.guests || 0; });
+        sSel = { factRub: sf, guests: sg, checkRub: sg ? Math.round(sf / sg) : 0 };
+        sSel.revenueMln = sf / 1e6;
+      }
+      if (sSel) {
+        /* цифры книги продаж по выбранной локации — то же, что на карточке */
+        /* до миллиона рубли читаются лучше, чем «0,030 млн ₽» */
+        var sVal = (sSel.factRub != null && Math.abs(sSel.factRub) < 1e6)
+          ? fmt(sSel.factRub) + ' ₽' : fmt(sSel.revenueMln, 3) + ' млн ₽';
+        r.push(['Выручка за ' + (f.yesterday || t.yesterday || 'вчера'), sVal]);
+        if (sSel.guests)   r.push(['Гостей', fmt(sSel.guests)]);
+        if (sSel.checkRub) r.push(['Средний чек', fmt(sSel.checkRub) + ' ₽']);
+        if (curLoc === 'uktus' || curLoc === 'total') {
+          /* динамика считается по термали Уктуса — показываем только там, где она про Уктус */
+          if (t.revenueDeltaWeek != null) r.push(['Термаль Уктуса к прошлой неделе', pct(t.revenueDeltaWeek), t.revenueDeltaWeek < 0]);
+        }
+      } else {
+        if (t.revenueMln) r.push(['Выручка за ' + (t.yesterday || 'вчера'), fmt(t.revenueMln, 3) + ' млн ₽']);
+        if (t.guests)     r.push(['Гостей', fmt(t.guests)]);
+        if (t.checkRub)   r.push(['Средний чек', fmt(t.checkRub) + ' ₽']);
+        if (t.revenueDeltaWeek != null) r.push(['К прошлой неделе', pct(t.revenueDeltaWeek), t.revenueDeltaWeek < 0]);
+        if (t.revenueDelta2025 != null) r.push(['К 2025 году', pct(t.revenueDelta2025), t.revenueDelta2025 < 0]);
+      }
     } else if (href === 'forecast.html') {
       if (fc.guests)     r.push(['Гостей ждём сегодня', '~' + fmt(fc.guests)]);
       if (fc.revenueMln) r.push(['Выручка, прогноз', '~' + fmt(fc.revenueMln, 2) + ' млн ₽']);
