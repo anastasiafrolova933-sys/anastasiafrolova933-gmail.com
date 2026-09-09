@@ -2344,6 +2344,9 @@ body { padding-bottom: 132px; }
 .lab-sheet__row span:first-child { color: var(--text-2); }
 .lab-sheet__row span:last-child { font-variant-numeric: tabular-nums; color: var(--accent); white-space: nowrap; }
 .lab-sheet__row.warn span:last-child { color: var(--warning); }
+.lab-sheet__row.sub { padding: 8px var(--s-4) 8px 28px; font-size: 13px; }
+.lab-sheet__row.sub span:first-child { color: var(--text-3, var(--text-2)); opacity: .8; }
+.lab-sheet__row.sub span:last-child { color: var(--text-2); }
 
 .lab-sheet__actions { margin-top: var(--s-6); display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
 .lab-sheet__open {
@@ -2652,7 +2655,12 @@ body { padding-bottom: 132px; }
     if (!L) return r;
     var t = L.thermal || {}, f = L.finance || {}, fc = L.forecast || {}, a = L.attendance || {};
     if (href === 'finance.html') {
-      if (f.totalRub) r.push(['Поступило за ' + (f.yesterday || 'вчера'), fmt(f.totalRub) + ' ₽']);
+      // Итого по всем локациям, затем разбивка по каждой (если их больше одной)
+      var byLoc = (f.byLoc || []).filter(function (x) { return x && x.totalRub; });
+      if (f.totalRub) r.push(['Итого за ' + (f.yesterday || 'вчера'), fmt(f.totalRub) + ' ₽']);
+      if (byLoc.length > 1) byLoc.forEach(function (x) {
+        r.push([x.name, fmt(x.totalRub) + ' ₽', false, 'sub']);
+      });
       if (f.kassaRub) r.push(['Из них касса', fmt(f.kassaRub) + ' ₽']);
       if (f.rsRub)    r.push(['Расчётный счёт', fmt(f.rsRub) + ' ₽']);
     } else if (href === 'sales.html') {
@@ -2677,7 +2685,10 @@ body { padding-bottom: 132px; }
     }
     var pf = a.planfact;
     if (pf && pf.pct != null && (href === 'finance.html' || href === 'owner.html')) {
-      r.push(['План месяца закрыт', fmt(pf.pct, 1) + '%', pf.pct < 90]);
+      // план-факт считается по термальному комплексу Уктуса —
+      // при нескольких локациях подпись уточняем, чтобы не читалось как ИТОГО
+      var pfMulti = !!(L.finance && L.finance.byLoc && L.finance.byLoc.length > 1);
+      r.push(['План месяца закрыт' + (pfMulti ? ' (Уктус)' : ''), fmt(pf.pct, 1) + '%', pf.pct < 90]);
     }
     return r;
   }
@@ -2718,7 +2729,7 @@ body { padding-bottom: 132px; }
               '<div class="lab-sheet__kpilbl">' + (kpiL ? kpiL.textContent : '') + '</div>' : '') +
       (desc ? '<div class="lab-sheet__desc">' + desc.textContent + '</div>' : '') +
       (rows.length ? '<div class="lab-sheet__rows">' + rows.map(function (x) {
-        return '<div class="lab-sheet__row' + (x[2] ? ' warn' : '') + '"><span>' + x[0] + '</span><span>' + x[1] + '</span></div>';
+        return '<div class="lab-sheet__row' + (x[2] ? ' warn' : '') + (x[3] ? ' ' + x[3] : '') + '"><span>' + x[0] + '</span><span>' + x[1] + '</span></div>';
       }).join('') + '</div>' : '') +
       '<div class="lab-sheet__actions">' +
         '<a class="lab-sheet__open" href="' + href + '">Открыть отчёт <span>→</span></a>' +
